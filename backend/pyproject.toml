@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "memeterm"
+version = "0.0.1"
+description = "Local-first Solana meme-coin analyst backend"
+requires-python = ">=3.11"
+readme = "../README.md"
+license = { text = "MIT" }
+authors = [{ name = "memeterm" }]
+
+dependencies = [
+    # Web / async
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "uvloop>=0.21; sys_platform != 'win32'",
+    "anyio>=4.6",
+    "httpx>=0.27",
+    "aiohttp>=3.10",
+    "websockets>=13",
+
+    # Data
+    "sqlmodel>=0.0.22",
+    "asyncpg>=0.30",
+    "alembic>=1.13",
+    "redis>=5.2",
+
+    # Scheduling / resilience
+    "apscheduler>=3.10",
+    "tenacity>=9.0",
+
+    # Config / validation
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+
+    # Observability
+    "structlog>=24.4",
+    "prometheus-client>=0.21",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-vcr>=1.0.2",
+    "freezegun>=1.5",
+    "fakeredis>=2.26",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "types-redis",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/memeterm"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "S", "RUF"]
+ignore = ["S101"]  # assert is fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_ignores = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
