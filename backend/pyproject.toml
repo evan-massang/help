@@ -75,3 +75,6 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "vcr: integration test using pytest-vcr cassette",
+]
