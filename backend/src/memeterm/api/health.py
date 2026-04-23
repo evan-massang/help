@@ -49,12 +49,29 @@ async def _probe_ollama() -> ProbeResult:
 
 
 async def _probe_postgres() -> ProbeResult:
-    # Deferred until the db session module lands. For now: unknown.
-    return ProbeResult("unknown", None, "db module not wired yet")
+    from memeterm.db import session as db_session
+
+    start = time.monotonic()
+    try:
+        await asyncio.wait_for(db_session.ping(), timeout=2.0)
+        return ProbeResult("ok", int((time.monotonic() - start) * 1000))
+    except asyncio.TimeoutError:
+        return ProbeResult("down", None, "timeout after 2s")
+    except Exception as exc:  # noqa: BLE001
+        return ProbeResult("down", None, str(exc)[:120])
 
 
 async def _probe_redis() -> ProbeResult:
-    return ProbeResult("unknown", None, "redis client not wired yet")
+    from memeterm import redis_client
+
+    start = time.monotonic()
+    try:
+        await asyncio.wait_for(redis_client.ping(), timeout=2.0)
+        return ProbeResult("ok", int((time.monotonic() - start) * 1000))
+    except asyncio.TimeoutError:
+        return ProbeResult("down", None, "timeout after 2s")
+    except Exception as exc:  # noqa: BLE001
+        return ProbeResult("down", None, str(exc)[:120])
 
 
 async def _probe_chroma() -> ProbeResult:
