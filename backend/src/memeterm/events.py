@@ -93,6 +93,42 @@ class OpportunitySurfaced(Event):
     surfaced_at: datetime
 
 
+@dataclass(slots=True, frozen=True)
+class PositionUpdated(Event):
+    """Snapshot of a single position after a trade or a PnL tick."""
+
+    kind: ClassVar[str] = "position_updated"
+
+    wallet: str
+    mint: str
+    symbol: str | None
+    status: str  # open | partial | closed
+    size_tokens: Decimal
+    avg_entry_usd: Decimal
+    avg_exit_usd: Decimal | None
+    last_price_usd: Decimal | None
+    size_usd: Decimal
+    size_usd_peak: Decimal
+    realized_pnl_usd: Decimal
+    unrealized_pnl_usd: Decimal
+    updated_at: datetime
+
+
+@dataclass(slots=True, frozen=True)
+class PositionSignal(Event):
+    """Exit-recommendation signal raised by the position monitor."""
+
+    kind: ClassVar[str] = "position_signal"
+
+    wallet: str
+    mint: str
+    symbol: str | None
+    rule: str  # take_profit, trailing_stop, liquidity_drain, ...
+    severity: str  # info | watch | action | critical
+    detail: dict[str, Any]
+    triggered_at: datetime
+
+
 class _Channel(Generic[E]):
     """One event type = one channel = N subscribers. Each subscriber gets its
     own bounded queue so a slow consumer can't block a fast producer.
