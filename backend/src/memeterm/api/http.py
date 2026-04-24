@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from memeterm import __version__
-from memeterm.api import debug, health, opportunities, positions, settings, thesis, ws
+from memeterm.api import debug, health, opportunities, positions, settings, thesis, wallets, ws
 
 
 @asynccontextmanager
@@ -44,6 +44,7 @@ app.include_router(opportunities.router, prefix="/api")
 app.include_router(positions.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 app.include_router(thesis.api, prefix="/api")
+app.include_router(wallets.router, prefix="/api")
 app.include_router(ws.router)
 
 

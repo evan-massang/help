@@ -31,7 +31,7 @@ from memeterm.events import OpportunitySurfaced, PositionSignal, PositionUpdated
 
 log = logging.getLogger(__name__)
 
-CHANNELS = ("opportunities", "positions", "alerts")
+CHANNELS = ("opportunities", "positions", "alerts", "wallets")
 
 
 @dataclass(slots=True)
@@ -230,11 +230,55 @@ async def _pump_thesis() -> None:
             log.exception("ws.pump.thesis.failed")
 
 
+async def _pump_wallet_trades() -> None:
+    from memeterm.wallets.watcher import WalletTradeDetected
+
+    async for ev in bus.subscribe(WalletTradeDetected):
+        try:
+            await hub.publish(
+                "wallets",
+                {
+                    "kind": "trade",
+                    "wallet": ev.wallet,
+                    "mint": ev.mint,
+                    "side": ev.side,
+                    "amount_usd": str(ev.amount_usd),
+                    "price_usd": str(ev.price_usd),
+                    "signature": ev.signature,
+                    "block_time": ev.block_time.isoformat(),
+                },
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("ws.pump.wallet_trades.failed")
+
+
+async def _pump_tier_changes() -> None:
+    from memeterm.wallets.refresh import WalletTierChanged
+
+    async for ev in bus.subscribe(WalletTierChanged):
+        try:
+            await hub.publish(
+                "alerts",
+                {
+                    "kind": "wallet_tier_changed",
+                    "pubkey": ev.pubkey,
+                    "old_tier": ev.old_tier,
+                    "new_tier": ev.new_tier,
+                    "composite": str(ev.composite),
+                    "changed_at": ev.changed_at.isoformat(),
+                },
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("ws.pump.tier_changes.failed")
+
+
 _BUS_PUMPS: tuple[Callable[[], Awaitable[None]], ...] = (
     _pump_opportunities,
     _pump_positions,
     _pump_alerts,
     _pump_thesis,
+    _pump_wallet_trades,
+    _pump_tier_changes,
 )
 
 

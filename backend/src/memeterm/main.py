@@ -69,6 +69,7 @@ async def _amain() -> None:
     from memeterm.safety.run import run as run_safety
     from memeterm.scanner.ingest import run as run_scanner
     from memeterm.scanner.scorer import run as run_scorer
+    from memeterm.wallets.service import run as run_wallets
 
     async with asyncio.TaskGroup() as tg:
         tg.create_task(_run_api(), name="api")
@@ -77,7 +78,8 @@ async def _amain() -> None:
         tg.create_task(run_scorer(), name="scorer")
         tg.create_task(run_positions(), name="positions")
         tg.create_task(run_thesis(), name="ai_thesis")
-        # Phase 5+ subsystems: wallets, narratives, hype, learning, alerts.
+        tg.create_task(run_wallets(), name="wallets")
+        # Phase 6+ subsystems: narratives, hype, learning, alerts.
 
         await stop.wait()
         log.info("memeterm.shutdown")

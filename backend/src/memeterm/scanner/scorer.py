@@ -145,6 +145,30 @@ def _as_float(v: Any) -> float | None:
         return None
 
 
+# Weights per tier for the smart-money subscore (higher tier = more signal).
+_TIER_WEIGHTS: dict[str, float] = {"S": 30.0, "A": 18.0, "B": 10.0, "C": 5.0, "watch": 0.0}
+
+
+async def smart_money_subscore(mint: str) -> tuple[Decimal, dict[str, Any]]:
+    """Translate the live reverse index into a 0..100 subscore.
+
+    Cheap Redis lookup; returns ``(score, breakdown)`` where breakdown is
+    the per-tier count used for explainability in the drawer.
+    """
+    try:
+        from memeterm.wallets.watcher import smart_money_score
+
+        count, by_tier = await smart_money_score(mint)
+    except Exception as exc:  # noqa: BLE001
+        log.debug("scorer.smart_money_failed", extra={"mint": mint, "err": str(exc)})
+        return Decimal("0"), {"count": 0, "by_tier": {}}
+
+    raw = sum(_TIER_WEIGHTS.get(tier, 0.0) * n for tier, n in by_tier.items())
+    # Hard cap at 100 so a flood of one-tier wallets doesn't drown other signals.
+    score = Decimal(str(round(min(100.0, raw), 2)))
+    return score, {"count": count, "by_tier": by_tier}
+
+
 async def score_one(
     birdeye: BirdeyeClient,
     event: SafetyCompleted,
@@ -153,6 +177,7 @@ async def score_one(
     symbol: str | None = None,
 ) -> ScoreResult:
     momentum, liquidity, overview = await _momentum_and_liquidity(birdeye, event.mint)
+    sm_score, sm_breakdown = await smart_money_subscore(event.mint)
     total_penalty = sum(
         int(stage.get("penalty", 0) or 0) for stage in event.stages.values()
     )
@@ -160,10 +185,11 @@ async def score_one(
         "safety": safety_score(event.verdict, total_penalty),
         "momentum": momentum,
         "liquidity": liquidity,
-        "smart_money": Decimal("0"),
+        "smart_money": sm_score,
         "narrative": Decimal("0"),
         "social": Decimal("0"),
     }
+    overview["smart_money"] = sm_breakdown
     result = compose(components)
 
     await _persist(event.mint, result)
