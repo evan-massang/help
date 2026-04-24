@@ -34,6 +34,8 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from memeterm.ai import budget, prompts, schemas
+from memeterm.ai.chroma import add_decision as chroma_add
+from memeterm.ai.embeddings import embed
 from memeterm.ai.providers.anthropic import AnthropicProvider
 from memeterm.ai.providers.gemini import GeminiProvider
 from memeterm.ai.providers.groq import GroqProvider
@@ -220,17 +222,30 @@ class AIRouter:
             input_tokens=last_result.input_tokens,
             output_tokens=last_result.output_tokens,
         )
-        await self._persist(
+        output_dict = validated.model_dump(mode="json")
+        row_id = await self._persist(
             task=task,
             subject_kind=subject_kind,
             subject_id=subject_id,
             step=step_used,
             result=last_result,
             prompt_hash=ph,
-            output=validated.model_dump(mode="json"),
+            output=output_dict,
             rag_refs=rag_refs,
         )
-        return validated.model_dump(mode="json")
+        # Best-effort Chroma push so similar_case retrievals improve over
+        # time. A failed push must not fail the router call.
+        if row_id is not None:
+            await self._index_decision(
+                decision_id=f"dec_{row_id}",
+                task=task,
+                subject_kind=subject_kind,
+                subject_id=subject_id,
+                user_prompt=user,
+                output=output_dict,
+                model=step_used.model,
+            )
+        return output_dict
 
     async def _downgrade_if_needed(
         self, step: RouteStep, steps: list[RouteStep]
@@ -264,7 +279,7 @@ class AIRouter:
         prompt_hash: str,
         output: dict[str, Any],
         rag_refs: dict[str, Any] | None,
-    ) -> None:
+    ) -> int | None:
         row = AIDecision(
             subject_kind=subject_kind,
             subject_id=subject_id,
@@ -282,6 +297,47 @@ class AIRouter:
         )
         async with session_scope() as session:
             session.add(row)
+            await session.flush()
+            return row.id
+
+    async def _index_decision(
+        self,
+        *,
+        decision_id: str,
+        task: TaskKind,
+        subject_kind: str,
+        subject_id: str,
+        user_prompt: str,
+        output: dict[str, Any],
+        model: str,
+    ) -> None:
+        # Only index tasks where retrieval pays off. narrative_tag and
+        # weekly_review are singletons — no similar-case value.
+        if task in ("narrative_tag", "weekly_review"):
+            return
+        document = (
+            f"[task={task} subject={subject_id}]\n"
+            f"PROMPT:\n{user_prompt[:2000]}\n\n"
+            f"OUTPUT:\n{json.dumps(output, default=str)[:2000]}"
+        )
+        try:
+            vec = await embed(document)
+            await chroma_add(
+                decision_id=decision_id,
+                embedding=vec,
+                metadata={
+                    "task": task,
+                    "subject_kind": subject_kind,
+                    "subject_id": subject_id,
+                    "model": model,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+                document=document,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.debug(
+                "ai.router.index_failed", extra={"task": task, "err": str(exc)}
+            )
 
 
 router = AIRouter()

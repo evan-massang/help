@@ -89,11 +89,38 @@ async def _probe_chroma() -> ProbeResult:
         return ProbeResult("down", None, str(exc)[:120])
 
 
+async def _probe_ai_budget() -> ProbeResult:
+    from memeterm.ai import budget
+
+    try:
+        snap = await budget.today()
+    except Exception as exc:  # noqa: BLE001
+        return ProbeResult("unknown", None, str(exc)[:120])
+    try:
+        remaining = float(snap.get("remaining_usd") or 0)
+        total = float(snap.get("budget_usd") or 0)
+    except (TypeError, ValueError):
+        return ProbeResult("unknown", None, "budget parse error")
+    ratio = (remaining / total) if total > 0 else 1.0
+    status: Status = "ok"
+    if ratio <= 0:
+        status = "degraded"
+    elif ratio < 0.1:
+        status = "degraded"
+    return ProbeResult(
+        status,
+        None,
+        f"spent ${snap.get('total_usd', '0')} / ${snap.get('budget_usd', '0')}, "
+        f"{snap.get('calls', 0)} calls",
+    )
+
+
 _PROBES = {
     "ollama": _probe_ollama,
     "postgres": _probe_postgres,
     "redis": _probe_redis,
     "chroma": _probe_chroma,
+    "ai_budget": _probe_ai_budget,
 }
 
 

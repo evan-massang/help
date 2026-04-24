@@ -208,10 +208,33 @@ async def _pump_alerts() -> None:
             log.exception("ws.pump.alerts.failed")
 
 
+def _thesis_payload(ev) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+    return {
+        "kind": "thesis_ready",
+        "mint": ev.mint,
+        "symbol": ev.symbol,
+        "score": str(ev.score),
+        "thesis": ev.output,
+        "latency_ms": ev.latency_ms,
+        "created_at": ev.created_at.isoformat(),
+    }
+
+
+async def _pump_thesis() -> None:
+    from memeterm.ai.thesis_pipeline import ThesisReady
+
+    async for ev in bus.subscribe(ThesisReady):
+        try:
+            await hub.publish("alerts", _thesis_payload(ev))
+        except Exception:  # noqa: BLE001
+            log.exception("ws.pump.thesis.failed")
+
+
 _BUS_PUMPS: tuple[Callable[[], Awaitable[None]], ...] = (
     _pump_opportunities,
     _pump_positions,
     _pump_alerts,
+    _pump_thesis,
 )
 
 

@@ -4,11 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { ThesisDrawer } from "@/components/ThesisDrawer";
 import {
   fetchOpportunities,
   type Opportunity,
   type OpportunitiesResponse,
 } from "@/lib/opportunities";
+import { fetchAiBudget, type AiBudget } from "@/lib/thesis";
 import { cn } from "@/lib/utils";
 import { getWsClient, type WsFrame } from "@/lib/ws";
 
@@ -78,13 +80,33 @@ export default function OpportunitiesPage() {
     [live],
   );
 
+  const [openDrawer, setOpenDrawer] = useState<{ mint: string; symbol: string | null } | null>(
+    null,
+  );
+
+  const budget = useQuery<AiBudget>({
+    queryKey: ["ai-budget"],
+    queryFn: fetchAiBudget,
+    refetchInterval: 10_000,
+  });
+
   return (
     <main className="mx-auto flex min-h-screen max-w-7xl flex-col gap-4 px-6 py-8">
       <header className="flex items-baseline justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Opportunities</h1>
-        <span className="text-xs text-muted-foreground">
-          {rows.length} tracked · live via ws
-        </span>
+        <div className="flex items-center gap-4 text-xs">
+          {budget.data && (
+            <span className="text-muted-foreground">
+              AI: ${budget.data.total_usd} / ${budget.data.budget_usd}
+              <span className="ml-1 text-[0.65rem]">
+                ({budget.data.calls} calls)
+              </span>
+            </span>
+          )}
+          <span className="text-muted-foreground">
+            {rows.length} tracked · live via ws
+          </span>
+        </div>
       </header>
 
       <div className="overflow-hidden rounded-lg border border-border">
@@ -116,7 +138,8 @@ export default function OpportunitiesPage() {
             {rows.map((op) => (
               <tr
                 key={op.mint}
-                className="border-t border-border/60 hover:bg-muted/30"
+                onClick={() => setOpenDrawer({ mint: op.mint, symbol: op.symbol })}
+                className="cursor-pointer border-t border-border/60 hover:bg-muted/30"
               >
                 <td className="px-3 py-2 font-semibold">
                   {op.symbol ?? "—"}
@@ -155,6 +178,14 @@ export default function OpportunitiesPage() {
           </tbody>
         </table>
       </div>
+
+      {openDrawer && (
+        <ThesisDrawer
+          mint={openDrawer.mint}
+          symbol={openDrawer.symbol}
+          onClose={() => setOpenDrawer(null)}
+        />
+      )}
     </main>
   );
 }
