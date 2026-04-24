@@ -18,9 +18,14 @@ export default function CommandDeck() {
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-6 py-10">
       <header className="flex items-baseline justify-between">
         <h1 className="text-2xl font-bold tracking-tight">memeterm</h1>
-        <span className="text-xs text-muted-foreground">
-          {data ? `v${data.version} · up ${data.uptime_s}s` : "—"}
-        </span>
+        <nav className="flex items-center gap-4 text-xs">
+          <a className="text-accent hover:underline" href="/opportunities">
+            opportunities
+          </a>
+          <span className="text-muted-foreground">
+            {data ? `v${data.version} · up ${data.uptime_s}s` : "—"}
+          </span>
+        </nav>
       </header>
 
       <section>

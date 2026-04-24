@@ -62,10 +62,19 @@ async def _amain() -> None:
             # Windows: rely on KeyboardInterrupt.
             pass
 
+    # Imported here so subsystem code is only loaded when main runs — keeps
+    # `uvicorn memeterm.api.http:app --reload` fast to restart.
+    from memeterm.safety.run import run as run_safety
+    from memeterm.scanner.ingest import run as run_scanner
+    from memeterm.scanner.scorer import run as run_scorer
+
     async with asyncio.TaskGroup() as tg:
         tg.create_task(_run_api(), name="api")
-        # Future subsystems (scanner, positions, wallets, narratives, hype,
-        # learning, rails, alerts) will be added here as tg.create_task().
+        tg.create_task(run_scanner(), name="scanner")
+        tg.create_task(run_safety(), name="safety")
+        tg.create_task(run_scorer(), name="scorer")
+        # Phase 3+ subsystems: positions, wallets, narratives, hype,
+        # learning, rails, alerts. Wired here as they land.
 
         await stop.wait()
         log.info("memeterm.shutdown")

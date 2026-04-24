@@ -26,19 +26,12 @@ import websockets
 from websockets.asyncio.client import ClientConnection
 
 from memeterm.adapters.errors import Unavailable
+from memeterm.adapters.helius_programs import PROGRAM_IDS
 from memeterm.config import get_settings
 
 log = logging.getLogger(__name__)
 
-# Solana programs we subscribe to. Referenced by the scanner in Phase 2.
-PROGRAM_IDS = {
-    "raydium_v4": "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
-    "raydium_clmm": "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
-    "pumpfun_bc": "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
-    "pumpfun_amm": "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
-    "moonshot": "MoonCVVNZfSYcdACpJCAp6QpVaqdTH83PMjkcmEsDaT",
-    "meteora_dlmm": "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
-}
+__all__ = ["PROGRAM_IDS", "stream_logs", "stream_account"]
 
 
 def _ws_url() -> str:

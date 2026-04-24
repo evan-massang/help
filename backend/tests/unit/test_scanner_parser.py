@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from memeterm.adapters.helius_ws import PROGRAM_IDS
+from memeterm.adapters.helius_programs import PROGRAM_IDS
 from memeterm.scanner.parser import (
     USDC_MINT,
     parse_enhanced_tx,

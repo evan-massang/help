@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from memeterm.adapters.helius_ws import PROGRAM_IDS
+from memeterm.adapters.helius_programs import PROGRAM_IDS
 
 VENUE_BY_PROGRAM: dict[str, str] = {
     PROGRAM_IDS["pumpfun_bc"]: "pumpfun_bc",
