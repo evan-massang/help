@@ -27,11 +27,11 @@ from typing import Any, Iterable
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from memeterm.events import OpportunitySurfaced, bus
+from memeterm.events import OpportunitySurfaced, PositionSignal, PositionUpdated, bus
 
 log = logging.getLogger(__name__)
 
-CHANNELS = ("opportunities",)
+CHANNELS = ("opportunities", "positions", "alerts")
 
 
 @dataclass(slots=True)
@@ -162,7 +162,57 @@ async def _pump_opportunities() -> None:
             log.exception("ws.pump.opportunities.failed")
 
 
-_BUS_PUMPS: tuple[Callable[[], Awaitable[None]], ...] = (_pump_opportunities,)
+def _position_payload(ev: PositionUpdated) -> dict[str, Any]:
+    return {
+        "wallet": ev.wallet,
+        "mint": ev.mint,
+        "symbol": ev.symbol,
+        "status": ev.status,
+        "size_tokens": str(ev.size_tokens),
+        "avg_entry_usd": str(ev.avg_entry_usd),
+        "avg_exit_usd": str(ev.avg_exit_usd) if ev.avg_exit_usd is not None else None,
+        "last_price_usd": str(ev.last_price_usd) if ev.last_price_usd is not None else None,
+        "size_usd": str(ev.size_usd),
+        "size_usd_peak": str(ev.size_usd_peak),
+        "realized_pnl_usd": str(ev.realized_pnl_usd),
+        "unrealized_pnl_usd": str(ev.unrealized_pnl_usd),
+        "updated_at": ev.updated_at.isoformat(),
+    }
+
+
+def _signal_payload(ev: PositionSignal) -> dict[str, Any]:
+    return {
+        "wallet": ev.wallet,
+        "mint": ev.mint,
+        "symbol": ev.symbol,
+        "rule": ev.rule,
+        "severity": ev.severity,
+        "detail": ev.detail,
+        "triggered_at": ev.triggered_at.isoformat(),
+    }
+
+
+async def _pump_positions() -> None:
+    async for ev in bus.subscribe(PositionUpdated):
+        try:
+            await hub.publish("positions", _position_payload(ev))
+        except Exception:  # noqa: BLE001
+            log.exception("ws.pump.positions.failed")
+
+
+async def _pump_alerts() -> None:
+    async for ev in bus.subscribe(PositionSignal):
+        try:
+            await hub.publish("alerts", _signal_payload(ev))
+        except Exception:  # noqa: BLE001
+            log.exception("ws.pump.alerts.failed")
+
+
+_BUS_PUMPS: tuple[Callable[[], Awaitable[None]], ...] = (
+    _pump_opportunities,
+    _pump_positions,
+    _pump_alerts,
+)
 
 
 async def run_pumps() -> None:

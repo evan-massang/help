@@ -22,6 +22,12 @@ export default function CommandDeck() {
           <a className="text-accent hover:underline" href="/opportunities">
             opportunities
           </a>
+          <a className="text-accent hover:underline" href="/positions">
+            positions
+          </a>
+          <a className="text-accent hover:underline" href="/settings">
+            settings
+          </a>
           <span className="text-muted-foreground">
             {data ? `v${data.version} · up ${data.uptime_s}s` : "—"}
           </span>

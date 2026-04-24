@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from memeterm import __version__
-from memeterm.api import debug, health, opportunities, ws
+from memeterm.api import debug, health, opportunities, positions, settings, ws
 
 
 @asynccontextmanager
@@ -41,6 +41,8 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api")
 app.include_router(debug.router, prefix="/api")
 app.include_router(opportunities.router, prefix="/api")
+app.include_router(positions.router, prefix="/api")
+app.include_router(settings.router, prefix="/api")
 app.include_router(ws.router)
 
 

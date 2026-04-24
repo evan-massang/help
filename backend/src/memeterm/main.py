@@ -64,6 +64,7 @@ async def _amain() -> None:
 
     # Imported here so subsystem code is only loaded when main runs — keeps
     # `uvicorn memeterm.api.http:app --reload` fast to restart.
+    from memeterm.positions.service import run as run_positions
     from memeterm.safety.run import run as run_safety
     from memeterm.scanner.ingest import run as run_scanner
     from memeterm.scanner.scorer import run as run_scorer
@@ -73,8 +74,8 @@ async def _amain() -> None:
         tg.create_task(run_scanner(), name="scanner")
         tg.create_task(run_safety(), name="safety")
         tg.create_task(run_scorer(), name="scorer")
-        # Phase 3+ subsystems: positions, wallets, narratives, hype,
-        # learning, rails, alerts. Wired here as they land.
+        tg.create_task(run_positions(), name="positions")
+        # Phase 4+ subsystems: wallets, narratives, hype, learning, alerts.
 
         await stop.wait()
         log.info("memeterm.shutdown")
