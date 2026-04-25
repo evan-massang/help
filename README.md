@@ -1,48 +1,179 @@
-# memecoin-terminal
+# memeterm
 
-A local-first, advisory desktop app for Solana meme-coin analysis. Read-only
-wallet watching, opportunity scanning, wallet intelligence, narrative tracking,
-and AI-assisted thesis/exit recommendations — all running on your laptop.
+Local-first, advisory-only Solana meme-coin analyst. Read-only Phantom
+wallet watching, opportunity scanning, wallet intelligence, narrative
+tracking, and AI-assisted thesis/exit recommendations — all on your laptop.
 
-See [the full plan](.claude/plans/bro-i-got-us-quirky-brook.md) for the complete
-spec (25 sections, 10 subsystems, 9 build phases).
+See [the full plan](.claude/plans/bro-i-got-us-quirky-brook.md) for the
+25-section spec.
 
-## Status
+## Status — Phase 8 (final)
 
-Phase 0 — Foundations. Backend skeleton + health endpoint + docker compose
-come up. Nothing else is wired yet.
+All ten subsystems wired:
 
-## Quick start (dev, Phase 0)
+| # | Subsystem | Where it lives |
+|---|-----------|----------------|
+| 1 | Opportunity scanner | `backend/src/memeterm/scanner/` |
+| 2 | Position monitor | `backend/src/memeterm/positions/` |
+| 3 | Wallet intelligence | `backend/src/memeterm/wallets/` |
+| 4 | Narrative engine | `backend/src/memeterm/narratives/` |
+| 5 | Fake-hype filter | `backend/src/memeterm/hype/` |
+| 6 | Next.js dashboard | `frontend/` |
+| 7 | AI orchestration | `backend/src/memeterm/ai/` |
+| 8 | Learning system | `backend/src/memeterm/learning/` |
+| 9 | Safety rails | `backend/src/memeterm/safety/`, `rails/` |
+| 10 | Alerting | `backend/src/memeterm/alerts/`, `infra/notifier/` |
+
+## Cold-start (first time)
+
+Target: from a fresh WSL2 + Docker Desktop install to a running dashboard
+in **under 3 minutes**.
 
 ```bash
-# 1. Fill in .env
-cp .env.example .env
+git clone <repo>
+cd memeterm
 
-# 2. Bring up infra (Postgres, Redis, ChromaDB)
+# 1. Fill in API keys (Helius is the only required one for the scanner)
+cp .env.example .env
+$EDITOR .env
+
+# 2. Bring up infra: Postgres 16, Redis 7, ChromaDB
 docker compose -f infra/docker-compose.yml up -d
 
-# 3. Install backend
-cd backend && pip install -e '.[dev]' && cd ..
+# 3. Backend deps + initial migration
+cd backend
+pip install -e '.[dev]'
+alembic -c alembic.ini revision --autogenerate -m "initial"
+alembic -c alembic.ini upgrade head
+cd ..
 
-# 4. Run the API
-uvicorn memeterm.api.http:app --reload --host 127.0.0.1 --port 8787
+# 4. Frontend deps
+cd frontend && pnpm install && cd ..
 
-# 5. Check health
-curl http://127.0.0.1:8787/api/health
+# 5. (Optional, Windows only) build the toast sidecar
+cd infra/notifier && cargo build --release && cd ../..
+
+# 6. One-command boot
+scripts/dev.sh         # WSL / Linux
+# or
+scripts/dev.ps1        # Windows (PowerShell)
 ```
+
+Open <http://localhost:3000> — Command Deck shows live opportunities,
+the alert feed, and system health dots within 2 seconds of startup.
+
+## Daily operation
+
+| Action | Command |
+|--------|---------|
+| Boot everything | `scripts/dev.sh` (or `dev.ps1` on Windows) |
+| Stop everything | `pm2 stop all && docker compose -f infra/docker-compose.yml stop` |
+| Tail backend logs | `pm2 logs memeterm-backend` |
+| Re-run a thesis manually | `curl -X POST http://localhost:8787/api/thesis/<MINT>` |
+| Force a calibration snapshot | `python -c "import asyncio; from memeterm.learning.calibration import run_once; asyncio.run(run_once())"` |
+| Backup Postgres now | `python -c "import asyncio; from memeterm.learning.backups import pg_dump_now; asyncio.run(pg_dump_now())"` |
+| Set the watched Phantom pubkey | POST `/api/settings/phantom` with JSON body `{"pubkey": "..."}` (or use Settings page) |
+
+## Verification (per the plan §23)
+
+```bash
+# Backend
+cd backend
+ruff check .
+mypy src/memeterm
+pytest -q                                   # unit + integration (cassettes)
+RECORD=1 pytest tests/integration            # re-record VCR cassettes
+
+# Frontend
+cd ../frontend
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm e2e:install                              # one-time
+pnpm e2e                                      # Playwright critical-path
+
+# Load test (Phase 8 §20 target: 500 launches/min, P99 < 2s)
+cd ..
+python scripts/loadtest.py --rate 8 --total 500 --report data/loadtest.json
+
+# Replay a fixture through the scanner parser
+python scripts/replay_stream.py backend/tests/fixtures/enhanced_tx_pumpfun_launch.json
+```
+
+## Routes
+
+| Route | What it shows |
+|-------|---------------|
+| `/` | Command Deck (top opportunities + alert feed + system health) |
+| `/opportunities` | Full opportunity table with click-to-thesis drawer |
+| `/positions` | Live position cards + PnL + exit-signal alerts |
+| `/wallets` | Tracked-wallet leaderboard + rubric drawer |
+| `/narratives` | Narrative momentum + per-narrative drawer |
+| `/settings` | Pubkey + budget + (forthcoming) mute manager |
+| `/review` | Latest weekly review + scorer calibration |
+
+REST surface is mounted under `/api/*`; WebSocket at `ws://127.0.0.1:8787/ws`
+with channels `opportunities`, `positions`, `wallets`, `narratives`,
+`alerts`. See per-route source under `backend/src/memeterm/api/`.
+
+## Keyboard shortcuts
+
+* `g d` deck · `g o` opportunities · `g p` positions · `g w` wallets · `g n` narratives · `g s` settings
+* `/` focus search
+* `m` toggle mute
+* `?` show help · `esc` close
+
+## Backups + crash reports
+
+* `data/backups/pg/memeterm_*.dump` — nightly `pg_dump`, 30-day retention
+* `data/backups/chroma/chroma_*` — weekly Chroma volume snapshot, 8-snapshot retention
+* `data/crashes/*.json` — supervisor-captured exception with full traceback + log tail
+* `data/snapshots/learning_*.json` — nightly calibration metrics
+* `data/snapshots/review_*.json` — weekly review (rendered by `/review`)
+
+## Safety posture
+
+* **Read-only**. The app never signs transactions and has no code path
+  that imports a signer library.
+* **Pubkey-only** — public on-chain data only.
+* **Advisory** — every recommendation surfaces the underlying numbers
+  (safety stages, score components, exit signals) so the human stays in
+  the loop.
+* **Local-first** — no telemetry, no remote logging, no cloud backups.
+  All persistent state lives under `data/` inside the WSL2 filesystem.
 
 ## Layout
 
 ```
-backend/     Python 3.11 + FastAPI + asyncio (WSL2 recommended)
-frontend/    Next.js 14 + TS (Windows native)  — not yet in repo
-infra/       docker-compose + PM2
-scripts/     dev.ps1 / dev.sh / replay_stream.py
-shared/      JSON schemas shared by FE/BE
+backend/                  Python 3.11 + FastAPI + asyncio
+  src/memeterm/
+    main.py               supervisor TaskGroup (9 subsystems + API)
+    config.py             pydantic-settings .env loader
+    db/                   SQLModel tables + alembic
+    adapters/             helius, birdeye, dexscreener, rugcheck,
+                          twitter, jupiter, gmgn, cielo, newsapi,
+                          gdelt, gtrends, phantom_watch
+    safety/               4-stage pipeline (authority/lp/holders/honeypot)
+    scanner/              ingest + parser + scorer
+    positions/            reconstruct + classify + watcher + signals
+    wallets/              rubric + ingest + watcher + refresh
+    narratives/           ingest + cluster + tagging + extract
+    hype/                 author shill + burst detection
+    ai/                   router + budget + chroma RAG + providers
+    alerts/               types + limiter + router + notifier
+    learning/             outcomes + calibration + drift + backups + weekly_review
+    rails/                rug cooldown + loss streak + overtrading
+    api/                  REST + WebSocket
+frontend/                 Next.js 14 + TypeScript
+  app/                    deck + opportunities + positions + wallets +
+                          narratives + settings + review
+  components/             ThesisDrawer, WalletDrawer, NarrativeDrawer,
+                          AlertToast, KeyboardNav, HealthDot
+  lib/                    typed clients per route + ws + store
+  e2e/                    Playwright critical-path
+infra/
+  docker-compose.yml      Postgres + Redis + Chroma
+  pm2.config.cjs          backend + frontend + notifier
+  notifier/               Rust toast sidecar (Windows)
+scripts/                  dev.{sh,ps1} + replay_stream + loadtest
 ```
-
-## Safety posture
-
-This app **never signs transactions**. It watches a Phantom pubkey (public
-data only) and produces advisory signals. No private keys, no trading, no
-deep-links into Phantom. Every recommendation is advisory.

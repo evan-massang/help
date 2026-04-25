@@ -112,6 +112,7 @@ export default function CommandDeck() {
           <a className="text-accent hover:underline" href="/positions">positions</a>
           <a className="text-accent hover:underline" href="/wallets">wallets</a>
           <a className="text-accent hover:underline" href="/narratives">narratives</a>
+          <a className="text-accent hover:underline" href="/review">review</a>
           <a className="text-accent hover:underline" href="/settings">settings</a>
           <SoundEnableBar />
           <span className="text-muted-foreground">
