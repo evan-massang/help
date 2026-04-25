@@ -15,6 +15,7 @@ from memeterm.api import (
     narratives as narratives_api,
     opportunities,
     positions,
+    review as review_api,
     settings,
     thesis,
     wallets,
@@ -58,6 +59,7 @@ app.include_router(thesis.api, prefix="/api")
 app.include_router(wallets.router, prefix="/api")
 app.include_router(narratives_api.router, prefix="/api")
 app.include_router(alerts_api.router, prefix="/api")
+app.include_router(review_api.router, prefix="/api")
 app.include_router(ws.router)
 
 

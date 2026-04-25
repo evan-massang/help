@@ -184,6 +184,26 @@ def similar_case(
     return system, user
 
 
+def weekly_review(*, data: dict[str, Any]) -> tuple[str, str]:
+    system = SYSTEM_BASE + (
+        " You are writing a weekly self-audit. Be brutally honest about "
+        "what worked, what didn't, and concrete prompt or rubric tweaks "
+        "to try next week."
+    )
+    user = (
+        "Audit the past week of memeterm activity. Use ONLY the supplied "
+        "context. Suggested changes must be specific and testable.\n\n"
+        f"CONTEXT (JSON):\n{json.dumps(data, default=str, indent=2)}\n"
+        + _schema_footer(
+            '{"highlights": [str]*0-8, "misses": [str]*0-8, '
+            '"suggested_prompt_changes": [str]*0-6, '
+            '"suggested_rubric_tweaks": [str]*0-6, '
+            '"narratives_to_watch": [str]*0-6}'
+        )
+    )
+    return system, user
+
+
 def prompt_hash(system: str, user: str) -> str:
     """Stable hash over (system, user) for the ai_decisions.prompt_hash
     column — enables A/B comparisons over time without a version field.
