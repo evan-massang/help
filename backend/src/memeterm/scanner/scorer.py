@@ -169,6 +169,129 @@ async def smart_money_subscore(mint: str) -> tuple[Decimal, dict[str, Any]]:
     return score, {"count": count, "by_tier": by_tier}
 
 
+async def narrative_subscore(mint: str) -> tuple[Decimal, dict[str, Any]]:
+    """Map the best-matching narrative (if any) into a 0..100 subscore.
+
+    confidence × momentum-z-score (clipped) → 0..100. A coin riding a
+    narrative on the way *down* gets a lower score than one with no
+    narrative match at all.
+    """
+    try:
+        from memeterm.narratives.tagging import best_match_for_coin
+        from sqlmodel.ext.asyncio.session import AsyncSession  # noqa: F401
+
+        from memeterm.db.models import Narrative
+        from memeterm.db.session import get_sessionmaker
+
+        match = await best_match_for_coin(mint)
+        if match is None:
+            return Decimal("0"), {"match": None}
+        sm = get_sessionmaker()
+        async with sm() as session:
+            n = await session.get(Narrative, match.narrative_id)
+        momentum = float(n.momentum) if n and n.momentum is not None else 0.0
+    except Exception as exc:  # noqa: BLE001
+        log.debug("scorer.narrative_failed", extra={"mint": mint, "err": str(exc)})
+        return Decimal("0"), {"match": None}
+
+    # Clip momentum z-score to [-2, 2] then map to [0, 100].
+    clipped = max(-2.0, min(2.0, momentum))
+    score = round(50 + (clipped / 2.0) * 50, 2)
+    score = max(0.0, score) * float(match.confidence)
+    return Decimal(str(round(score, 2))), {
+        "narrative": match.narrative_id,
+        "label": match.label,
+        "confidence": match.confidence,
+        "momentum": momentum,
+    }
+
+
+async def social_subscore(mint: str) -> tuple[Decimal, dict[str, Any]]:
+    """De-shilled mention velocity for the mint. Coordinated bursts flip
+    the contribution negative (capped at -50) so paid pumps hurt instead
+    of help.
+    """
+    try:
+        from datetime import timedelta as _td
+
+        from sqlalchemy import select
+
+        from memeterm.db.models import SocialMention
+        from memeterm.db.session import get_sessionmaker
+        from memeterm.hype.burst import Mention, detect_burst
+
+        sm = get_sessionmaker()
+        async with sm() as session:
+            since = datetime.now(timezone.utc) - _td(minutes=30)
+            rows = (
+                await session.execute(
+                    select(SocialMention)
+                    .where(SocialMention.created_at >= since)
+                )
+            ).scalars().all()
+        # Filter to mentions for this mint (substring on text + mints array).
+        rows = [r for r in rows if (r.mentions_mints and mint in r.mentions_mints) or mint in (r.text or "")]
+        if not rows:
+            return Decimal("0"), {"mentions_30m": 0}
+
+        # Pull author shill scores in one go for de-shilled velocity.
+        shill_by_author: dict[str, float] = {}
+        from memeterm.db.models import SocialAuthor
+
+        async with sm() as session:
+            authors = (
+                await session.execute(
+                    select(SocialAuthor).where(
+                        SocialAuthor.author_id.in_({r.author_id for r in rows})
+                    )
+                )
+            ).scalars().all()
+        for a in authors:
+            shill_by_author[a.author_id] = float(a.shill_score or 0)
+
+        organic_count = 0
+        promo_count = 0
+        for r in rows:
+            shill = shill_by_author.get(r.author_id, 0.0)
+            if shill >= 0.7 or r.is_promoted:
+                promo_count += 1
+            else:
+                organic_count += 1
+
+        burst = detect_burst(
+            [
+                Mention(
+                    author_id=r.author_id,
+                    text=r.text or "",
+                    created_at=r.created_at,
+                    shill_score=shill_by_author.get(r.author_id, 0.0),
+                    is_promoted=bool(r.is_promoted),
+                )
+                for r in rows
+            ]
+        )
+
+        # Base score: organic mentions, log-scaled. 10 organic = ~50, 100 = ~100.
+        import math
+
+        base = min(100.0, 50.0 * math.log10(max(1, organic_count) + 1) / math.log10(11))
+        breakdown: dict[str, Any] = {
+            "mentions_30m": len(rows),
+            "organic": organic_count,
+            "promoted": promo_count,
+        }
+        if burst is not None:
+            breakdown["burst"] = burst.severity
+            if burst.severity == "coordinated":
+                return Decimal("-50"), breakdown
+            if burst.severity == "promoted":
+                base *= 0.4  # heavy penalty, still positive
+        return Decimal(str(round(base, 2))), breakdown
+    except Exception as exc:  # noqa: BLE001
+        log.debug("scorer.social_failed", extra={"mint": mint, "err": str(exc)})
+        return Decimal("0"), {}
+
+
 async def score_one(
     birdeye: BirdeyeClient,
     event: SafetyCompleted,
@@ -178,6 +301,8 @@ async def score_one(
 ) -> ScoreResult:
     momentum, liquidity, overview = await _momentum_and_liquidity(birdeye, event.mint)
     sm_score, sm_breakdown = await smart_money_subscore(event.mint)
+    narr_score, narr_breakdown = await narrative_subscore(event.mint)
+    social_score, social_breakdown = await social_subscore(event.mint)
     total_penalty = sum(
         int(stage.get("penalty", 0) or 0) for stage in event.stages.values()
     )
@@ -186,10 +311,12 @@ async def score_one(
         "momentum": momentum,
         "liquidity": liquidity,
         "smart_money": sm_score,
-        "narrative": Decimal("0"),
-        "social": Decimal("0"),
+        "narrative": narr_score,
+        "social": social_score,
     }
     overview["smart_money"] = sm_breakdown
+    overview["narrative"] = narr_breakdown
+    overview["social"] = social_breakdown
     result = compose(components)
 
     await _persist(event.mint, result)

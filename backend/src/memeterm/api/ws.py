@@ -31,7 +31,7 @@ from memeterm.events import OpportunitySurfaced, PositionSignal, PositionUpdated
 
 log = logging.getLogger(__name__)
 
-CHANNELS = ("opportunities", "positions", "alerts", "wallets")
+CHANNELS = ("opportunities", "positions", "alerts", "wallets", "narratives")
 
 
 @dataclass(slots=True)
