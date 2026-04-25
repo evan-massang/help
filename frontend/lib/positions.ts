@@ -45,7 +45,7 @@ export async function fetchPhantom(): Promise<PhantomSettings> {
   return (await res.json()) as PhantomSettings;
 }
 
-export async function setPhantom(pubkey: string): Promise<void> {
+export async function setPhantom(pubkey: string): Promise<{ persisted: boolean; reload: string }> {
   const res = await fetch("/api/settings/phantom", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -55,4 +55,37 @@ export async function setPhantom(pubkey: string): Promise<void> {
     const body = await res.text();
     throw new Error(`phantom set http ${res.status}: ${body}`);
   }
+  return (await res.json()) as { persisted: boolean; reload: string };
+}
+
+export interface BudgetSettings {
+  daily_ai_budget_usd: number;
+}
+
+export async function fetchBudgetSetting(): Promise<BudgetSettings> {
+  const res = await fetch("/api/settings/budget", { cache: "no-store" });
+  if (!res.ok) throw new Error(`budget http ${res.status}`);
+  return (await res.json()) as BudgetSettings;
+}
+
+export async function setBudget(daily_ai_budget_usd: number): Promise<{ persisted: boolean }> {
+  const res = await fetch("/api/settings/budget", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ daily_ai_budget_usd }),
+  });
+  if (!res.ok) throw new Error(`budget set http ${res.status}`);
+  return (await res.json()) as { persisted: boolean };
+}
+
+export interface KeyStatus {
+  name: string;
+  configured: boolean;
+  masked: string;
+}
+
+export async function fetchKeyStatus(): Promise<{ keys: KeyStatus[] }> {
+  const res = await fetch("/api/settings/keys", { cache: "no-store" });
+  if (!res.ok) throw new Error(`keys http ${res.status}`);
+  return (await res.json()) as { keys: KeyStatus[] };
 }

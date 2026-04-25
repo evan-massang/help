@@ -250,7 +250,28 @@ class AIRouter:
     async def _downgrade_if_needed(
         self, step: RouteStep, steps: list[RouteStep]
     ) -> RouteStep:
-        """If paid tier is over budget, swap for the next free_cloud/local step."""
+        """Swap a step out when:
+
+        * Paid tier is over the day's budget, OR
+        * The provider is currently flagged as drifting (Phase 8 learning
+          guard at :mod:`memeterm.learning.drift` flips a Redis flag when
+          a provider's success rate drops ≥15% week-over-week).
+        """
+        # Drift check applies to *every* tier, not just paid.
+        if await self._provider_drifting(step.provider):
+            for fallback in steps:
+                if fallback.provider == step.provider:
+                    continue
+                if await self._provider_drifting(fallback.provider):
+                    continue
+                log.info(
+                    "ai.router.downgrade_drift",
+                    extra={"from": step.model, "to": fallback.model},
+                )
+                return fallback
+            # Every alternative also drifting — fall through and use the
+            # original step. Better a degraded response than nothing.
+
         if step.tier != "paid_cloud":
             return step
         # Conservative pre-estimate: 1K input + 1K output. estimate_cost is
@@ -267,6 +288,16 @@ class AIRouter:
                 )
                 return fallback
         return step  # nothing cheaper available
+
+    async def _provider_drifting(self, provider: str) -> bool:
+        """Cheap Redis check; failures fall back to "not drifting" so a
+        flapping Redis can never make every provider look broken."""
+        try:
+            from memeterm.learning.drift import is_drifting
+
+            return await is_drifting(provider)
+        except Exception:  # noqa: BLE001
+            return False
 
     async def _persist(
         self,
