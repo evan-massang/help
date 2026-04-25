@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from memeterm import __version__
 from memeterm.api import (
+    alerts as alerts_api,
     debug,
     health,
     narratives as narratives_api,
@@ -56,6 +57,7 @@ app.include_router(settings.router, prefix="/api")
 app.include_router(thesis.api, prefix="/api")
 app.include_router(wallets.router, prefix="/api")
 app.include_router(narratives_api.router, prefix="/api")
+app.include_router(alerts_api.router, prefix="/api")
 app.include_router(ws.router)
 
 

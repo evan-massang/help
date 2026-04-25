@@ -285,6 +285,45 @@ class RailsEvent(SQLModel, table=True):
     acknowledged_at: datetime | None = Field(default=None, sa_column=TS_NULL)
 
 
+# ---------------------------------------------------------------------------
+# 5.16 alerts (added Phase 7 — persisted before any channel delivery so
+# replay-from-cursor is honest after a crash).
+# ---------------------------------------------------------------------------
+class Alert(SQLModel, table=True):
+    __tablename__ = "alerts"
+
+    id: int | None = Field(default=None, primary_key=True)
+    severity: str = Field(index=True)  # info | watch | action | critical
+    rule: str = Field(index=True)  # take_profit_100, thesis_ready, tier_changed, etc.
+    subject_kind: str = Field(index=True)  # coin | position | wallet | narrative
+    subject_id: str = Field(index=True, max_length=128)
+    title: str = Field(max_length=200)
+    body: dict[str, Any] = Field(sa_column=_jsonb())
+    triggered_at: datetime = Field(
+        sa_column=sa.Column(TIMESTAMP(timezone=True), nullable=False, index=True)
+    )
+    delivered_channels: list[str] | None = Field(default=None, sa_column=_text_array())
+    acknowledged_at: datetime | None = Field(default=None, sa_column=TS_NULL)
+    dedup_key: str = Field(index=True, max_length=200)
+
+
+# ---------------------------------------------------------------------------
+# 5.17 mute_rules
+# ---------------------------------------------------------------------------
+class MuteRule(SQLModel, table=True):
+    __tablename__ = "mute_rules"
+
+    id: int | None = Field(default=None, primary_key=True)
+    severity: str | None = Field(default=None, index=True)  # null = match any
+    rule: str | None = None
+    subject_kind: str | None = None
+    subject_id: str | None = None
+    active_from: datetime | None = Field(default=None, sa_column=TS_NULL)
+    active_until: datetime | None = Field(default=None, sa_column=TS_NULL)
+    note: str | None = None
+    created_at: datetime = Field(sa_column=TS)
+
+
 # Convenience: all tables registered on SQLModel.metadata are discoverable via
 # `SQLModel.metadata.tables`. Alembic's env.py imports this module to pick
 # them up for autogenerate.
@@ -304,4 +343,6 @@ __all__ = [
     "AIDecision",
     "Outcome",
     "RailsEvent",
+    "Alert",
+    "MuteRule",
 ]

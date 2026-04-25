@@ -27,7 +27,7 @@ from typing import Any, Iterable
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from memeterm.events import OpportunitySurfaced, PositionSignal, PositionUpdated, bus
+from memeterm.events import OpportunitySurfaced, PositionUpdated, bus
 
 log = logging.getLogger(__name__)
 
@@ -180,54 +180,12 @@ def _position_payload(ev: PositionUpdated) -> dict[str, Any]:
     }
 
 
-def _signal_payload(ev: PositionSignal) -> dict[str, Any]:
-    return {
-        "wallet": ev.wallet,
-        "mint": ev.mint,
-        "symbol": ev.symbol,
-        "rule": ev.rule,
-        "severity": ev.severity,
-        "detail": ev.detail,
-        "triggered_at": ev.triggered_at.isoformat(),
-    }
-
-
 async def _pump_positions() -> None:
     async for ev in bus.subscribe(PositionUpdated):
         try:
             await hub.publish("positions", _position_payload(ev))
         except Exception:  # noqa: BLE001
             log.exception("ws.pump.positions.failed")
-
-
-async def _pump_alerts() -> None:
-    async for ev in bus.subscribe(PositionSignal):
-        try:
-            await hub.publish("alerts", _signal_payload(ev))
-        except Exception:  # noqa: BLE001
-            log.exception("ws.pump.alerts.failed")
-
-
-def _thesis_payload(ev) -> dict[str, Any]:  # type: ignore[no-untyped-def]
-    return {
-        "kind": "thesis_ready",
-        "mint": ev.mint,
-        "symbol": ev.symbol,
-        "score": str(ev.score),
-        "thesis": ev.output,
-        "latency_ms": ev.latency_ms,
-        "created_at": ev.created_at.isoformat(),
-    }
-
-
-async def _pump_thesis() -> None:
-    from memeterm.ai.thesis_pipeline import ThesisReady
-
-    async for ev in bus.subscribe(ThesisReady):
-        try:
-            await hub.publish("alerts", _thesis_payload(ev))
-        except Exception:  # noqa: BLE001
-            log.exception("ws.pump.thesis.failed")
 
 
 async def _pump_wallet_trades() -> None:
@@ -252,33 +210,42 @@ async def _pump_wallet_trades() -> None:
             log.exception("ws.pump.wallet_trades.failed")
 
 
-async def _pump_tier_changes() -> None:
-    from memeterm.wallets.refresh import WalletTierChanged
+async def _pump_alerts() -> None:
+    """Single source of truth for the alerts channel.
 
-    async for ev in bus.subscribe(WalletTierChanged):
+    The alert router (memeterm.alerts.router) consumes raw bus events
+    (PositionSignal, ThesisReady, WalletTierChanged, SafetyCompleted=fail),
+    runs them through dedup + mute + rate-limit, and re-publishes a
+    normalized AlertReady. This pump turns those into the WS frame the
+    dashboard already understands.
+    """
+    from memeterm.alerts.router import AlertReady
+
+    async for ev in bus.subscribe(AlertReady):
         try:
             await hub.publish(
                 "alerts",
                 {
-                    "kind": "wallet_tier_changed",
-                    "pubkey": ev.pubkey,
-                    "old_tier": ev.old_tier,
-                    "new_tier": ev.new_tier,
-                    "composite": str(ev.composite),
-                    "changed_at": ev.changed_at.isoformat(),
+                    "alert_id": ev.alert_id,
+                    "severity": ev.severity,
+                    "rule": ev.rule,
+                    "subject_kind": ev.subject_kind,
+                    "subject_id": ev.subject_id,
+                    "title": ev.title,
+                    "body": ev.body,
+                    "channels": ev.channels,
+                    "triggered_at": ev.triggered_at.isoformat(),
                 },
             )
         except Exception:  # noqa: BLE001
-            log.exception("ws.pump.tier_changes.failed")
+            log.exception("ws.pump.alerts.failed")
 
 
 _BUS_PUMPS: tuple[Callable[[], Awaitable[None]], ...] = (
     _pump_opportunities,
     _pump_positions,
-    _pump_alerts,
-    _pump_thesis,
     _pump_wallet_trades,
-    _pump_tier_changes,
+    _pump_alerts,
 )
 
 
