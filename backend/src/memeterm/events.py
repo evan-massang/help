@@ -65,6 +65,12 @@ class SafetyCompleted(Event):
 
 @dataclass(slots=True, frozen=True)
 class Scored(Event):
+    """Per-mint score event. The :class:`OpportunitySurfaced` event is the
+    user-visible derivative; this raw event is published for any future
+    in-process consumer (a dashboard "score history" widget, etc.). The
+    learning calibration job reads scores from the ``scores`` table
+    directly rather than subscribing here."""
+
     kind: ClassVar[str] = "scored"
 
     mint: str

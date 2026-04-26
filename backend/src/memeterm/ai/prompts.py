@@ -184,6 +184,32 @@ def similar_case(
     return system, user
 
 
+def wallet_summary(
+    *,
+    pubkey: str,
+    tier: str,
+    rubric_components: dict[str, Any],
+    recent_trades: list[dict[str, Any]],
+) -> tuple[str, str]:
+    system = SYSTEM_BASE
+    payload = {
+        "pubkey": pubkey,
+        "tier": tier,
+        "rubric_components": rubric_components,
+        "recent_trades": recent_trades[:30],
+    }
+    user = (
+        "Summarize this wallet's trading style in plain English. Lead with "
+        "what they're known for; flag anything risky.\n\n"
+        f"DATA (JSON):\n{json.dumps(payload, default=str, indent=2)}\n"
+        + _schema_footer(
+            '{"style": str<=200, "recent_behavior": str<=400, '
+            '"flags": [str]*0-6}'
+        )
+    )
+    return system, user
+
+
 def weekly_review(*, data: dict[str, Any]) -> tuple[str, str]:
     system = SYSTEM_BASE + (
         " You are writing a weekly self-audit. Be brutally honest about "
