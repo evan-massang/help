@@ -51,6 +51,12 @@ dev = [
     "mypy>=1.13",
     "types-redis",
 ]
+# Optional fallback path for the Twitter adapter — scraping via burner
+# accounts when the v2 quota isn't available. Install with
+# `pip install -e '.[twikit]'`.
+twikit = [
+    "twikit>=2.3",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/memeterm"]
