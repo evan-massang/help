@@ -24,6 +24,24 @@ All ten subsystems wired:
 | 9 | Safety rails | `backend/src/memeterm/safety/`, `rails/` |
 | 10 | Alerting | `backend/src/memeterm/alerts/`, `infra/notifier/` |
 
+## Operating modes
+
+The whole pipeline runs without a wallet. Three sane configurations:
+
+* **Observe mode (no wallet, no buying)**. Leave `PHANTOM_PUBKEY` blank.
+  Scanner, safety, scorer, AI thesis, narratives, wallet-intel, alerts
+  all run. The position monitor parks idle. Use this for the first
+  week to watch what the system surfaces before you trade against it.
+* **Watch mode (read-only wallet)**. Paste your Phantom pubkey on
+  `/settings`. Position monitor activates: tracks PnL, fires
+  exit-signal alerts when you're in a coin. You still buy/sell
+  manually in Phantom — the app never signs.
+* **Sized-watch mode (default once configured)**. Same as Watch mode
+  plus the opportunity drawer shows a recommended buy size scaled to
+  your wallet (`risk_per_trade_pct` × score multiplier). Tweak the
+  base risk on `/settings`. The recommendation is advisory; you still
+  type the number into Phantom yourself.
+
 ## Cold-start (first time)
 
 Target: from a fresh WSL2 + Docker Desktop install to a running dashboard
@@ -42,9 +60,8 @@ docker compose -f infra/docker-compose.yml up -d
 
 # 3. Backend deps + initial migration
 cd backend
-pip install -e '.[dev]'
-alembic -c alembic.ini revision --autogenerate -m "initial"
-alembic -c alembic.ini upgrade head
+pip install -e '.[dev]'           # add the [twikit] extra for free Twitter scraping
+scripts/init_db.sh                # autogenerates + applies the alembic baseline
 cd ..
 
 # 4. Frontend deps
@@ -58,6 +75,42 @@ scripts/dev.sh         # WSL / Linux
 # or
 scripts/dev.ps1        # Windows (PowerShell)
 ```
+
+## API key tiers (what each unlocks)
+
+You don't need every key on day 1. The system degrades gracefully:
+
+| Tier | Keys | Cost | What you get |
+|------|------|------|--------------|
+| **Bare minimum** | `HELIUS_API_KEY` | ~$49/mo Developer | Scanner + safety pipeline + 4-stage filter. Position monitor when wallet is set. |
+| **Recommended** | + `BIRDEYE_API_KEY` + one of `ANTHROPIC_API_KEY` / `GROQ_API_KEY` | ~$60/mo + LLM | Above + momentum/liquidity scoring + AI thesis (Anthropic) or free Llama (Groq). |
+| **Full free path** | Bare minimum + `GROQ_API_KEY` + `GOOGLE_AI_API_KEY` + twikit accounts | ~$49/mo | All AI on free tiers, Twitter scraped via twikit, Birdeye replaced by DexScreener + GeckoTerminal price fallback chain. Some features (deep holder data, security flags) won't be available. |
+| **Everything** | + `RUGCHECK_JWT` + `CIELO_API_KEY` + `GMGN_SESSION_COOKIE` + `TWITTER_BEARER_TOKEN` + `NEWSAPI_KEY` | varies | All ten subsystems at full fidelity. |
+
+### Free-tier Twitter via twikit
+
+The X API Basic tier is $200/mo. To skip it:
+
+```bash
+pip install -e '.[twikit]'        # install the extra
+# create 1–3 throwaway X accounts (separate emails + phone numbers)
+# log into each interactively once with twikit's helpers — this writes
+# data/twikit/<username>.json
+# in .env:
+TWITTER_SCRAPE_ACCOUNTS=user1,user2,user3
+# leave TWITTER_BEARER_TOKEN blank
+```
+
+The Twitter adapter falls through automatically: v2 when the bearer
+token is set, twikit when it isn't. Burner accounts get suspended
+periodically — expect to refresh them every few weeks.
+
+### Free-tier prices via DexScreener + GeckoTerminal
+
+If you don't want a Birdeye key, leave `BIRDEYE_API_KEY` blank. The
+price fallback chain skips Birdeye and uses DexScreener (no key) →
+GeckoTerminal (no key). You lose deep holder distribution + security
+flags from Stage 3, but momentum + liquidity subscores keep working.
 
 Open <http://localhost:3000> — Command Deck shows live opportunities,
 the alert feed, and system health dots within 2 seconds of startup.
