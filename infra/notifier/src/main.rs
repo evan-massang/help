@@ -33,14 +33,25 @@ struct NotifyRequest {
 
 #[cfg(windows)]
 fn fire_toast(req: &NotifyRequest) -> anyhow::Result<()> {
-    use winrt_notification::{Sound, Toast};
+    use winrt_notification::{Duration, Sound, Toast};
+
+    let is_critical = req.sound.as_deref() == Some("critical");
 
     let mut toast = Toast::new(Toast::POWERSHELL_APP_ID)
         .title(&req.title)
         .text1(&req.body);
 
+    // Critical alerts stick in the Action Center for the maximum window
+    // (~25s) so a quick blink while you're heads-down doesn't kill the
+    // chance to see it.
+    toast = toast.duration(if is_critical { Duration::Long } else { Duration::Short });
+
     if let Some(sound) = &req.sound {
         toast = toast.sound(match sound.as_str() {
+            // The looping alarm sound requires a registered appx for the
+            // toast scenario; we stick with Reminder which is the loudest
+            // non-looping system sound. The frontend's CRITICAL_REPLAY_MS
+            // (30s) re-fires the cue if the user hasn't acked.
             "critical" => Some(Sound::Reminder),
             "action" => Some(Sound::Default),
             "watch" => Some(Sound::IM),
@@ -51,7 +62,7 @@ fn fire_toast(req: &NotifyRequest) -> anyhow::Result<()> {
     if let Some(_url) = &req.url {
         // Toast click handler would normally launch the browser; the simple
         // `winrt-notification` API doesn't support that without a registered
-        // appx. We log the URL so the user can see it in the action center.
+        // appx. The URL stays visible in the Action Center entry.
     }
 
     toast.show().map_err(|e| anyhow::anyhow!("{e}"))

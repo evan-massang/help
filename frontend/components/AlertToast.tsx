@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { ackAlert, type Alert, type Severity } from "@/lib/alerts";
-import { playCue, useUI } from "@/lib/store";
+import { cancelReplay, playCue, useUI } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { getWsClient, type WsFrame } from "@/lib/ws";
 
@@ -38,7 +38,10 @@ export function AlertToast() {
     const unsub = ws.subscribe("alerts", (frame: WsFrame) => {
       const payload = frame.payload as Alert;
       pushAlert(payload);
-      if (!muted) playCue(payload.severity);
+      if (!muted) {
+        const id = (payload.alert_id ?? payload.id) as number | undefined;
+        playCue(payload.severity, id);
+      }
     });
     return () => unsub();
   }, [muted, pushAlert]);
@@ -64,6 +67,7 @@ export function AlertToast() {
               <button
                 onClick={() => {
                   if (id !== undefined) {
+                    cancelReplay(id);
                     void ackAlert(id).catch(() => {});
                     ackLocally(id);
                   }
