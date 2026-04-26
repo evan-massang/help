@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # --- App ---
     PHANTOM_PUBKEY: str = ""
     DAILY_AI_BUDGET_USD: float = Field(default=15.00, ge=0)
+    RISK_PER_TRADE_PCT: float = Field(default=2.0, ge=0.0, le=5.0)
     APP_BEARER_TOKEN: SecretStr = SecretStr("")
     LOG_LEVEL: str = "INFO"
     API_HOST: str = "127.0.0.1"

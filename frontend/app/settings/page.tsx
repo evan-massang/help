@@ -15,11 +15,14 @@ import {
   type KeyStatus,
   type PhantomSettings,
 } from "@/lib/positions";
+import { fetchRisk, fetchWalletValue, setRisk, type RiskSettings, type WalletValueResponse } from "@/lib/sizing";
 
 export default function SettingsPage() {
   const qc = useQueryClient();
   const phantom = useQuery<PhantomSettings>({ queryKey: ["phantom"], queryFn: fetchPhantom });
   const budget = useQuery<BudgetSettings>({ queryKey: ["budget"], queryFn: fetchBudgetSetting });
+  const risk = useQuery<RiskSettings>({ queryKey: ["risk"], queryFn: fetchRisk });
+  const walletValue = useQuery<WalletValueResponse>({ queryKey: ["wallet-value"], queryFn: () => fetchWalletValue() });
   const keys = useQuery<{ keys: KeyStatus[] }>({ queryKey: ["keys"], queryFn: fetchKeyStatus });
   const mutes = useQuery<{ count: number; items: MuteRow[] }>({ queryKey: ["mutes"], queryFn: fetchMutes });
 
@@ -44,6 +47,15 @@ export default function SettingsPage() {
       <BudgetCard
         current={budget.data?.daily_ai_budget_usd ?? null}
         onSaved={async () => qc.invalidateQueries({ queryKey: ["budget"] })}
+      />
+
+      <RiskCard
+        current={risk.data?.risk_per_trade_pct ?? null}
+        walletValue={walletValue.data ?? null}
+        onSaved={async () => {
+          await qc.invalidateQueries({ queryKey: ["risk"] });
+          await qc.invalidateQueries({ queryKey: ["wallet-value"] });
+        }}
       />
 
       <KeysCard rows={keys.data?.keys ?? []} />
@@ -161,6 +173,86 @@ function BudgetCard({ current, onSaved }: { current: number | null; onSaved: () 
           type="submit"
           disabled={saving}
           className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+        {persisted !== null && (
+          <span className="text-xs text-ok">
+            persisted: {persisted ? "yes" : "no"}
+          </span>
+        )}
+      </form>
+    </section>
+  );
+}
+
+function RiskCard({
+  current,
+  walletValue,
+  onSaved,
+}: {
+  current: number | null;
+  walletValue: WalletValueResponse | null;
+  onSaved: () => Promise<void>;
+}) {
+  const [input, setInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [persisted, setPersisted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (current !== null) setInput(String(current));
+  }, [current]);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const v = Number(input);
+    if (!Number.isFinite(v) || v < 0 || v > 5) return;
+    setSaving(true);
+    try {
+      const out = await setRisk(v);
+      setPersisted(out.persisted);
+      await onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const total = walletValue?.value?.total_usd;
+  const previewBuy =
+    total && current !== null
+      ? ((Number(total) * (current / 100)).toFixed(2))
+      : null;
+
+  return (
+    <section className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-5">
+      <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+        Risk per trade (% of wallet)
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        Base allocation per opportunity. Score multiplier (0×–1×) applies on top, capped at 5%.
+      </p>
+      {total && (
+        <p className="text-xs text-muted-foreground">
+          Wallet snapshot: <span className="font-mono">${Number(total).toFixed(2)}</span> ·
+          {" "}
+          at {current ?? 0}% × max-confidence ≈ <span className="font-mono">${previewBuy}</span> per buy
+        </p>
+      )}
+      <form onSubmit={onSubmit} className="flex items-center gap-2">
+        <input
+          type="number"
+          value={input}
+          step="0.5"
+          min="0"
+          max="5"
+          onChange={(e) => setInput(e.target.value)}
+          className="w-32 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:border-accent"
+        />
+        <span className="text-xs text-muted-foreground">%</span>
+        <button
+          type="submit"
+          disabled={saving}
+          className="ml-auto rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save"}
         </button>

@@ -17,6 +17,7 @@ from memeterm.api import (
     positions,
     review as review_api,
     settings,
+    sizing as sizing_api,
     thesis,
     wallets,
     ws,
@@ -60,6 +61,7 @@ app.include_router(wallets.router, prefix="/api")
 app.include_router(narratives_api.router, prefix="/api")
 app.include_router(alerts_api.router, prefix="/api")
 app.include_router(review_api.router, prefix="/api")
+app.include_router(sizing_api.router, prefix="/api")
 app.include_router(ws.router)
 
 

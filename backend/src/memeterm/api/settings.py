@@ -78,6 +78,23 @@ async def set_budget(payload: BudgetPayload) -> dict[str, Any]:
     return {"daily_ai_budget_usd": payload.daily_ai_budget_usd, "persisted": persisted}
 
 
+class RiskPayload(BaseModel):
+    risk_per_trade_pct: float = Field(ge=0.0, le=5.0)
+
+
+@router.get("/risk")
+async def get_risk() -> dict[str, Any]:
+    return {"risk_per_trade_pct": get_settings().RISK_PER_TRADE_PCT}
+
+
+@router.post("/risk")
+async def set_risk(payload: RiskPayload) -> dict[str, Any]:
+    settings = get_settings()
+    settings.RISK_PER_TRADE_PCT = payload.risk_per_trade_pct
+    persisted = env_update("RISK_PER_TRADE_PCT", str(payload.risk_per_trade_pct))
+    return {"risk_per_trade_pct": payload.risk_per_trade_pct, "persisted": persisted}
+
+
 @router.get("/keys")
 async def key_status() -> dict[str, Any]:
     """Report which provider keys are configured. Values are never echoed.

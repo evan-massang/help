@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { fetchSizing, type SizingResponse } from "@/lib/sizing";
 import { fetchThesis, refreshThesis, type ThesisResponse } from "@/lib/thesis";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,12 @@ export function ThesisDrawer({
   const q = useQuery<ThesisResponse>({
     queryKey: ["thesis", mint],
     queryFn: () => fetchThesis(mint),
+  });
+
+  const sizing = useQuery<SizingResponse>({
+    queryKey: ["sizing", mint],
+    queryFn: () => fetchSizing(mint),
+    retry: false,
   });
 
   async function onRefresh() {
@@ -115,6 +122,26 @@ export function ThesisDrawer({
                 </span>
               </span>
             </section>
+
+            {sizing.data && Number(sizing.data.recommended_usd) > 0 && (
+              <section className="rounded-md border border-accent/40 bg-accent/10 p-3">
+                <h3 className="mb-1 text-xs uppercase tracking-widest text-accent">
+                  Suggested buy size
+                </h3>
+                <p className="text-2xl font-bold">${sizing.data.recommended_usd}</p>
+                <p className="mt-1 text-[0.65rem] text-muted-foreground">
+                  {sizing.data.rationale} · wallet ${sizing.data.wallet_usd}
+                </p>
+                <p className="mt-1 text-[0.6rem] italic text-muted-foreground">
+                  Advisory only — buy manually in Phantom.
+                </p>
+              </section>
+            )}
+            {sizing.data && Number(sizing.data.recommended_usd) === 0 && sizing.data.wallet_pubkey && (
+              <section className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                Sizing skipped: {sizing.data.rationale}
+              </section>
+            )}
 
             {t.one_liner && (
               <section className="rounded-md border border-border bg-muted/20 p-3 italic">
