@@ -21,16 +21,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Awaitable, Callable
 
-from memeterm.adapters.birdeye import BirdeyeClient
-from memeterm.adapters.dexscreener import DexscreenerClient
-from memeterm.adapters.errors import AdapterError
+from memeterm.adapters.prices import PriceFeed
 from memeterm.db.models import Position
 from memeterm.events import PositionUpdated, bus
 from memeterm.positions.persist import load_open_positions, recompute_position
 
 log = logging.getLogger(__name__)
 
-PriceHook = Callable[[Position, Decimal], Awaitable[None]]
+PriceHook = Callable[[Position, Decimal, Decimal | None], Awaitable[None]]
 
 
 class PnLTicker:
@@ -51,20 +49,21 @@ class PnLTicker:
             await asyncio.Event().wait()
             return
 
-        async with BirdeyeClient() as birdeye, DexscreenerClient() as dex:
+        async with PriceFeed() as feed:
             while True:
                 try:
-                    await self._tick(birdeye, dex)
+                    await self._tick(feed)
                 except Exception:  # noqa: BLE001
                     log.exception("ticker.failed")
                 await asyncio.sleep(self.tick_s)
 
-    async def _tick(self, birdeye: BirdeyeClient, dex: DexscreenerClient) -> None:
+    async def _tick(self, feed: PriceFeed) -> None:
         positions = await load_open_positions(self.wallet)
         if not positions:
             return
         for pos in positions:
-            price = await _current_price(pos.mint, birdeye, dex)
+            quote = await feed.quote(pos.mint)
+            price = quote.price_usd
             state = await recompute_position(self.wallet, pos.mint)
             state.mark(price)
             size_usd = (state.size_tokens * price) if (price and state.size_tokens) else Decimal("0")
@@ -87,24 +86,6 @@ class PnLTicker:
             )
             if self._signal_hook is not None and price is not None:
                 try:
-                    await self._signal_hook(pos, price)
+                    await self._signal_hook(pos, price, quote.lp_usd)
                 except Exception:  # noqa: BLE001
                     log.exception("ticker.signal_hook_failed", extra={"mint": pos.mint})
-
-
-async def _current_price(
-    mint: str, birdeye: BirdeyeClient, dex: DexscreenerClient
-) -> Decimal | None:
-    try:
-        data = await birdeye.price(mint)
-        if isinstance(data, dict) and data.get("value") is not None:
-            return Decimal(str(data["value"]))
-    except AdapterError:
-        pass
-    try:
-        pair = await dex.best_solana_pair(mint)
-        if pair and pair.get("priceUsd"):
-            return Decimal(str(pair["priceUsd"]))
-    except AdapterError:
-        pass
-    return None

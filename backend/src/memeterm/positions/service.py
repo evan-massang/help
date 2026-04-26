@@ -28,8 +28,12 @@ from memeterm.runtime import runtime
 log = logging.getLogger(__name__)
 
 
-async def _signal_hook(pos: Position, current_price_usd: Decimal) -> None:
-    await signal_engine.evaluate(pos, current_price_usd, lp_usd=None)
+async def _signal_hook(
+    pos: Position, current_price_usd: Decimal, lp_usd: Decimal | None
+) -> None:
+    # PriceFeed in the ticker now returns LP alongside price, so the
+    # liquidity-drain rule has real-time data instead of always None.
+    await signal_engine.evaluate(pos, current_price_usd, lp_usd=lp_usd)
 
 
 async def _safe_backfill(wallet: str) -> None:

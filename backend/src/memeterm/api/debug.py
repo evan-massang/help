@@ -18,6 +18,7 @@ from memeterm.adapters.base import BaseAdapter
 from memeterm.adapters.birdeye import BirdeyeClient
 from memeterm.adapters.dexscreener import DexscreenerClient
 from memeterm.adapters.errors import AdapterError
+from memeterm.adapters.geckoterminal import GeckoTerminalClient
 from memeterm.adapters.helius import HeliusClient
 from memeterm.adapters.jupiter import JupiterClient
 from memeterm.adapters.phantom_watch import bootstrap as phantom_bootstrap
@@ -31,6 +32,7 @@ _ADAPTERS: list[type[BaseAdapter]] = [
     HeliusClient,
     BirdeyeClient,
     DexscreenerClient,
+    GeckoTerminalClient,
     RugcheckClient,
     TwitterClient,
     JupiterClient,
